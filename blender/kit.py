@@ -32,6 +32,8 @@ mat('mesh', (.02, .022, .026), .45, .6)          # перфорация: в иг
 mat('screen', (.02, .05, .06), .2, 0, emit=(.05, .2, .25))
 mat('cloud', (.27, .3, .36), .62, .05)
 mat('fabric', (.012, .013, .016), .85, 0)
+mat('state', (0, 0, 0), .4, 0, emit=(.2, 1, .6))     # светящаяся деталь, цвет задаёт игра
+mat('paint_y', (.9, .62, .08), .45, .1)              # жёлтая краска «опасно»
 for n, c in {'led_g': (.2, 1, .6), 'led_a': (1, .65, .12), 'led_b': (.15, .6, 1), 'led_r': (1, .1, .04)}.items():
     mat(n, (0, 0, 0), .4, 0, emit=c)
 
@@ -302,9 +304,87 @@ def build_post(X):
     E.append(box(.44, .44, .03, (0, 0, 1.07), 'led_r', 0)); E[-1].name = 'led_r'
     return model('post', B, E, X)
 
+# ================= песочница ИИ-агента: «порты» прав =================
+def text_mesh(txt, size, loc, m, depth=.04, rot=(0, 0, 0)):
+    bpy.ops.object.text_add(location=loc, rotation=rot); t = bpy.context.object
+    t.data.body = txt; t.data.size = size; t.data.extrude = depth; t.data.align_x = 'CENTER'; t.data.align_y = 'CENTER'
+    bpy.ops.object.convert(target='MESH'); t = bpy.context.object
+    t.data.materials.clear(); t.data.materials.append(MAT[m]); return t
+
+def build_p_read(X):   # репозиторий: стопка картриджей с кодом
+    B, E = [], []
+    B.append(box(1.3, 1.0, .12, (0, 0, .06), 'frame', .03, 3))
+    for i in range(3):
+        z = .2 + i * .27
+        B.append(box(1.16 - i * .04, .86 - i * .03, .22, (0, 0, z), 'shell' if i % 2 == 0 else 'frame', .05, 3))
+        B.append(box(.5, .02, .05, (-.2, -.43 + i * .015, z), 'dark', .01, 1))
+        E.append(box(.16, .02, .05, (.38, -.43 + i * .015, z), 'state', .01, 1)); E[-1].name = 'state'
+    E.append(text_mesh('</>', .42, (0, -.02, .76), 'state', .03)); E[-1].name = 'state'
+    return model('p_read', B, E, X)
+
+def build_p_tests(X):  # тесты: пробирки в штативе
+    B, E = [], []
+    B.append(box(1.3, .7, .14, (0, 0, .07), 'frame', .04, 3))
+    for sx in (-1, 1): B.append(box(.08, .5, .9, (sx * .6, 0, .55), 'frame', .03))
+    B.append(box(1.28, .55, .08, (0, 0, .68), 'shell', .03, 2))
+    for i, lv in enumerate((.45, .3, .55)):
+        x = -.36 + i * .36
+        B.append(cyl(.135, .95, (x, 0, .6), 'glass', verts=24, bev=.03))
+        E.append(cyl(.11, lv, (x, 0, .16 + lv / 2), 'state', verts=20, bev=.02)); E[-1].name = 'state'
+        B.append(cyl(.15, .08, (x, 0, 1.1), 'steel', verts=24, bev=.02))
+    return model('p_tests', B, E, X)
+
+def build_p_net(X):    # интернет: глобус на подставке
+    B, E = [], []
+    B.append(cyl(.55, .12, (0, 0, .06), 'frame', verts=48, bev=.03))
+    B.append(cyl(.06, .3, (0, 0, .25), 'steel', verts=16))
+    c = (0, 0, .82)
+    B.append(sphere(.5, c, 'dark', 32, 16))
+    for k in range(4):
+        bpy.ops.mesh.primitive_torus_add(major_radius=.515, minor_radius=.02, location=c, rotation=(math.pi / 2, 0, k * math.pi / 4), major_segments=48, minor_segments=4)
+        t = bpy.context.object; t.data.materials.append(MAT['state']); t.name = 'state'; E.append(t)
+    for zz in (-.25, 0, .25):
+        r = math.sqrt(.515 ** 2 - zz ** 2)
+        bpy.ops.mesh.primitive_torus_add(major_radius=r, minor_radius=.018, location=(0, 0, c[2] + zz), major_segments=48, minor_segments=4)
+        t = bpy.context.object; t.data.materials.append(MAT['state']); t.name = 'state'; E.append(t)
+    bpy.ops.mesh.primitive_torus_add(major_radius=.62, minor_radius=.03, location=c, rotation=(0, math.radians(23), 0), major_segments=64, minor_segments=8)
+    t = bpy.context.object; t.data.materials.append(MAT['steel']); bm = bmesh.new(); bm.from_mesh(t.data)
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z > .25], context='VERTS'); bm.to_mesh(t.data); bm.free(); B.append(t)
+    return model('p_net', B, E, X)
+
+def build_p_secrets(X):  # секреты: сейф
+    B, E = [], []
+    B.append(box(1.2, 1.0, 1.05, (0, 0, .58), 'shell', .1, 4))
+    B.append(box(.96, .04, .82, (0, -.5, .6), 'frame', .04, 3))
+    for zz in (.35, .85):
+        B.append(cyl(.05, .14, (-.5, -.5, zz), 'steel', verts=16))
+    B.append(cyl(.2, .06, (.05, -.54, .62), 'steel', rot=(math.pi / 2, 0, 0), verts=40, bev=.02))
+    B.append(cyl(.06, .05, (.05, -.58, .62), 'dark', rot=(math.pi / 2, 0, 0), verts=24))
+    for k in range(3):
+        a = k * 2 * math.pi / 3
+        B.append(box(.035, .035, .26, (.05 + .14 * math.sin(a), -.6, .62 + .14 * math.cos(a)), 'steel', .01, 1, rot=(0, a, 0)))
+    E.append(box(.24, .02, .04, (.3, -.53, .92), 'state', .01, 1)); E[-1].name = 'state'
+    for sx in (-1, 1): B.append(box(.18, .16, .06, (sx * .42, 0, .03), 'rubber', .02))
+    return model('p_secrets', B, E, X)
+
+def build_p_deploy(X):   # деплой в прод: красная кнопка под откинутой крышкой
+    B, E = [], []
+    B.append(box(1.25, 1.05, .34, (0, 0, .17), 'frame', .06, 3))
+    n = 10
+    for i in range(n):   # «зебра» по верхнему краю
+        x = -.6 + (i + .5) * 1.2 / n
+        B.append(box(1.2 / n - .015, .05, .07, (x, -.52, .3), 'paint_y' if i % 2 == 0 else 'dark', .005, 1))
+    B.append(cyl(.38, .08, (0, -.05, .38), 'steel', verts=48, bev=.02))
+    E.append(cyl(.3, .16, (0, -.05, .48), 'led_r', verts=48, bev=.06, seg=4)); E[-1].name = 'led_r'
+    B.append(box(.86, .86, .03, (0, .36, .78), 'glass', .02, 2, rot=(math.radians(62), 0, 0)))
+    B.append(box(.9, .06, .06, (0, .4, .36), 'steel', .02))
+    E.append(box(.2, .02, .04, (.42, -.53, .14), 'state', .01, 1)); E[-1].name = 'state'
+    return model('p_deploy', B, E, X)
+
 print('building…')
 roots = [build_rack(-12), build_switch(-7), build_appliance(-2), build_appliance(2, 'tool', 1.7, .95, 1.2, 1.2, .6, .08, light=False),
-         build_monitor(5), build_laptop(7.5), build_soc(13), build_cloud(22), build_post(27)]
+         build_monitor(5), build_laptop(7.5), build_soc(13), build_cloud(22), build_post(27),
+         build_p_read(32), build_p_tests(35), build_p_net(38), build_p_secrets(41), build_p_deploy(44)]
 for r in roots:
     tris = sum(len(p.vertices) - 2 for p in r.data.polygons) + sum(sum(len(p.vertices) - 2 for p in c.data.polygons) for c in r.children if c.type == 'MESH')
     print('MODEL', r.name, 'tris', tris, 'mats', len(r.data.materials), 'kids', len(r.children))

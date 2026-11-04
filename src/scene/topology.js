@@ -26,9 +26,9 @@ export const TRUNK=[[430,322],[430,150]];
 export const WEB=[[430,150],[548,150]];
 export const MAIL=[[430,268],[538,268]];
 export const CORE=[[430,322],[430,489],[470,489]];
-export const WS=[[622,500],[690,500],[690,540],[732,540]];
+export const PCS=[[622,500],[690,500],[690,540],[732,540]];
 export const SOC=[[622,478],[650,478],[650,330],[775,330]];
-export const cables=[IN,TRUNK,WEB,[[430,268],[430,322]],MAIL,CORE,WS,SOC];
+export const cables=[IN,TRUNK,WEB,[[430,268],[430,322]],MAIL,CORE,PCS,SOC];
 
 export const tools={
  ngfw:{name:'NGFW',product:'PT NGFW',desc:'фильтрует соединения на границе сети'},
@@ -55,8 +55,8 @@ const R=(id,kind,world,guard,every,hit,delay=0,extra={})=>{
 };
 const webWorld=[...IN,[430,150],[548,150]];
 const mailWorld=[...IN,[430,268],[538,268]];
-const c2World=[...rev(WS),[622,489],[470,489],[430,489],[430,322],...rev(IN)];
-const latWorld=[...rev(WS),[622,489],[470,489],[430,489],[430,322]];
+const c2World=[...rev(PCS),[622,489],[470,489],[430,489],[430,322],...rev(IN)];
+const latWorld=[...rev(PCS),[622,489],[470,489],[430,489],[430,322]];
 export const routes=[
  R('scan','threat',IN,'ngfw',2300,'gw'),
  R('sqli','threat',webWorld,'waf',2900,'web',600),
@@ -64,6 +64,6 @@ export const routes=[
  R('c2','threat',c2World,'edr',3300,'inet',400),
  R('lateral','threat',latWorld,'nta',2600,'core',1800),
  R('users','legit',webWorld,null,1150,null),
- R('lan','legit',rev(WS),null,1700,null,300),
+ R('lan','legit',rev(PCS),null,1700,null,300),
  R('logs','log',SOC,'siem',520,null,0,{needs:'siem'})
 ];

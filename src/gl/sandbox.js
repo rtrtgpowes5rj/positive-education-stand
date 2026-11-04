@@ -1,6 +1,6 @@
 import {THREE,toon,glow,outline,sprite,hdr,ease,lerp,labelSprite,panelScene,box,canvasTex,OL,BONE,STEEL} from './core';
 import {domeShader} from './network';
-import {mats,rbox,mesh} from './kit';
+import {mats,rbox,mesh,kitModel} from './kit';
 
 const RED=[1.9,.16,.07],MINT=[.4,1.6,1.1],AMB=[2.0,1.3,.25],DIM=[.35,.38,.45];
 const mat=(c,x={})=>glow(c[0],c[1],c[2],x);
@@ -10,7 +10,7 @@ export const PERMS=[
  {id:'read',label:'репозиторий',need:true,pos:[-4.5,-1.4]},
  {id:'tests',label:'тесты в песочнице',need:true,pos:[4.5,-1.4]},
  {id:'net',label:'интернет',need:false,pos:[-3.6,3.0]},
- {id:'secrets',label:'секреты CI',need:false,pos:[0,-5.4]},
+ {id:'secrets',label:'секреты CI',need:false,pos:[-2.2,-5.0]},
  {id:'deploy',label:'деплой в прод',need:false,pos:[3.6,3.0]}
 ];
 
@@ -45,20 +45,25 @@ export function createAgentSandbox(parent,{quality=1,cb={},steps=[]}={}){
   secrets:icon(g=>{g.strokeRect(38,58,52,40);g.beginPath();g.arc(64,58,16,Math.PI,0);g.stroke()}),
   deploy:icon(g=>{g.beginPath();g.moveTo(64,28);g.lineTo(64,96);g.moveTo(40,52);g.lineTo(64,28);g.lineTo(88,52);g.stroke()})
  };
+ const yellow=new THREE.MeshStandardMaterial({color:0xd9a21c,roughness:.45,metalness:.1});
  const mods=PERMS.map(p=>{
   const g=new THREE.Group();g.position.set(p.pos[0],0,p.pos[1]);scene.add(g);
   const base=new THREE.Mesh(new THREE.CylinderGeometry(1.15,1.25,.22,6),toon(0x2a2e35));base.position.y=.11;base.receiveShadow=true;g.add(base);outline(ctx,base,0x80858f,1.4,.9,30);
-  const blk=new THREE.Mesh(new THREE.CylinderGeometry(.82,.9,.95,6),new THREE.MeshStandardMaterial({color:p.need?0x2a2f36:0x2b2224,roughness:.3,metalness:.75}));blk.position.y=.7;blk.castShadow=true;g.add(blk);blk.userData.ol=outline(ctx,blk);
-  const cap=new THREE.Mesh(new THREE.CircleGeometry(.62,6),new THREE.MeshBasicMaterial({map:iconTex[p.id],color:0xffffff,transparent:true,toneMapped:false}));cap.rotation.x=-Math.PI/2;cap.rotation.z=Math.PI/6;cap.position.y=.48;blk.add(cap);
+  const blk=new THREE.Mesh(new THREE.CylinderGeometry(.82,.9,.95,6),new THREE.MeshStandardMaterial({color:p.need?0x2a2f36:0x2b2224,roughness:.3,metalness:.75}));blk.position.y=.7;blk.castShadow=true;g.add(blk);
+  // модель из Blender (blender/kit.py, p_<id>): сам шестигранник остаётся невидимой зоной касания
+  const stateMat=mat(DIM),model=kitModel('p_'+p.id,M,{body:'shell',glow:{state:stateMat},extra:{paint_y:yellow}});
+  let cap=null,bodyMat=null;
+  if(model){blk.material.visible=false;model.position.y=-.475;model.scale.setScalar(1.4);model.rotation.y=-Math.atan2(p.pos[0],p.pos[1]+6)*.6;blk.add(model);bodyMat=model.userData.body.material;model.traverse(o=>{if(o.isMesh&&o.material!==stateMat)o.castShadow=true})}
+  else{blk.userData.ol=outline(ctx,blk);cap=new THREE.Mesh(new THREE.CircleGeometry(.62,6),new THREE.MeshBasicMaterial({map:iconTex[p.id],color:0xffffff,transparent:true,toneMapped:false}));cap.rotation.x=-Math.PI/2;cap.rotation.z=Math.PI/6;cap.position.y=.48;blk.add(cap)}
   blk.userData.id=p.id;
   const ring=new THREE.Mesh(new THREE.TorusGeometry(1.05,.04,8,48),mat(DIM));ring.rotation.x=Math.PI/2;ring.position.y=.26;g.add(ring);
   const led=new THREE.Mesh(new THREE.BoxGeometry(.7,.07,.07),mat(DIM));led.position.set(0,1.0,.88);g.add(led);
   if(!p.need){ // знак опасности: красный треугольник на грани
    const tri=new THREE.Mesh(new THREE.ConeGeometry(.2,.1,3),mat(RED));tri.position.set(0,1.32,0);g.add(tri);
   }
-  const lab=labelSprite(p.label,{size:.85,font:'700 34px sans-serif'});lab.position.set(0,2.1,0);g.add(lab);
+  const lab=labelSprite(p.label,{size:.85,font:'700 34px sans-serif'});if(model&&p.pos[1]>0)lab.position.set(0,.15,1.75);else lab.position.set(0,model?2.55:2.1,0);g.add(lab);
   const beam=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,1,8),mat(p.need?MINT:RED));beam.visible=false;scene.add(beam);
-  return{p,g,blk,ring,led,lab,beam,hov:0,k:0,col:new THREE.Color()};
+  return{p,g,blk,ring,led,lab,beam,cap,stateMat,bodyMat,hov:0,k:0,col:new THREE.Color()};
  });
  const meshes=mods.map(m=>m.blk);
 
@@ -123,7 +128,7 @@ export function createAgentSandbox(parent,{quality=1,cb={},steps=[]}={}){
    m.beam.visible=m.k>.03;m.beam.position.copy(from).add(to).multiplyScalar(.5);m.beam.scale.set(1+m.hov*.5,len*m.k,1+m.hov*.5);m.beam.lookAt(to);m.beam.rotateX(Math.PI/2);
    m.beam.position.lerpVectors(from,to,m.k*.5);
    if(on&&risky&&Math.random()<dt*5)sp.emit(m.g.position.clone().setY(1.2),1,{speed:1.2,color:RED,size:.09,life:.7,gravity:1.4});
-   m.blk.material.emissive.setRGB(on&&risky?.22:.0,on&&risky?.02:.0,.0);m.blk.children[0].material.color.setRGB(col[0]*(on?1.2:.6),col[1]*(on?1.2:.6),col[2]*(on?1.2:.6));
+   const em=m.bodyMat&&m.bodyMat.emissive||(m.cap?m.blk.material.emissive:null);if(em)em.setRGB(on&&risky?.22:.0,on&&risky?.02:.0,.0);(m.cap?m.cap.material.color:m.stateMat.color).setRGB(col[0]*(on?1.2:.6),col[1]*(on?1.2:.6),col[2]*(on?1.2:.6));
   }
   // конвейер
   if(runT>=0){runT+=dt;pk.position.x=-5.2+runT*3.8;
