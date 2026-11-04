@@ -10,6 +10,7 @@ import NetMap from './scene/NetMap';
 import NetStage,{net} from './gl/NetStage';
 import Hero3D,{hero} from './gl/Hero3D';
 import {webglOK,stagesWarm} from './gl/core';
+import {kitReady} from './gl/kit';
 import {reduced,Btn,hintStat,Odo,holdGate,releaseGate,SoundToggle} from './ui';
 import {sfx} from './audio';
 import Showcase from './Showcase';
@@ -390,4 +391,5 @@ function App(){
 // ссылка ?seed — тестовые результаты на этом устройстве
 const qs=new URLSearchParams(location.search);
 if(qs.has('seed')){seedBoard();qs.delete('seed');const q=qs.toString();history.replaceState(null,'',location.pathname+(q?'?'+q:'')+location.hash)}
-createRoot(document.getElementById('root')).render(<App/>);
+// сцены собираются из моделей Blender: ждём их загрузку (не дольше 8 с, иначе — простые формы)
+kitReady.then(()=>createRoot(document.getElementById('root')).render(<App/>));

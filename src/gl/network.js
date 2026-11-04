@@ -5,7 +5,7 @@ import {cables,slots,tools,routes} from '../scene/topology';
 import {sfx} from '../audio';
 import {createFlow} from './flow';
 import {TIER} from './tier';
-import {studio,mats,rack,switchBox,appliance,monitor,socDesk,labelTex,mesh,rbox,setAccent,ledDot,glowMat} from './kit';
+import {studio,kitModel,mats,rack,switchBox,appliance,monitor,socDesk,labelTex,mesh,rbox,setAccent,ledDot,glowMat} from './kit';
 
 const K=0.028;
 // плоскость схемы 1000×640 → мир (X вправо, Z к зрителю)
@@ -80,7 +80,15 @@ export function createNetwork(parent,{quality=1}={}){
   fill.rotation.x=-Math.PI/2;fill.position.copy(W((x0+x1)/2,(y0+y1)/2,.01));scene.add(fill);
  };
  zone(392,52,760,358);zone(392,380,964,626);
- const slab=(x0,y0,x1,y1)=>{const a=W(x0,y0),b=W(x1,y1);const m=new THREE.Mesh(new THREE.BoxGeometry(b.x-a.x,.22,b.z-a.z),new THREE.MeshStandardMaterial({color:0x22262d,roughness:.55,metalness:.45}));m.position.set((a.x+b.x)/2,.0,(a.z+b.z)/2);m.receiveShadow=true;m.castShadow=true;scene.add(m);outline(ctx,m,0x80858f,1.6,.9)};
+ // фальшпол серверной: плитки 1.2 м, часть — перфорированные (продув), стыки темнее
+ const tileTex=canvasTex(256,256,(g,w,h)=>{g.fillStyle='#2a2f37';g.fillRect(0,0,w,h);
+  for(let i=0;i<2;i++)for(let j=0;j<2;j++){const x=i*128,y=j*128;g.fillStyle=(i+j)%2?'#2d323a':'#282c33';g.fillRect(x+3,y+3,122,122);
+   if(i===1&&j===0){g.fillStyle='#1a1d22';for(let u=0;u<9;u++)for(let v=0;v<9;v++){g.beginPath();g.arc(x+18+u*11.5,y+18+v*11.5,3.1,0,7);g.fill()}}
+   g.fillStyle='rgba(255,255,255,.05)';g.fillRect(x+3,y+3,122,2)}
+  g.fillStyle='#14171b';for(let k=0;k<=2;k++){g.fillRect(k*128-2,0,4,h);g.fillRect(0,k*128-2,w,4)}});
+ tileTex.wrapS=tileTex.wrapT=THREE.RepeatWrapping;tileTex.anisotropy=8;
+ const slab=(x0,y0,x1,y1)=>{const a=W(x0,y0),b=W(x1,y1);const tt=tileTex.clone();tt.needsUpdate=true;tt.repeat.set((b.x-a.x)/2.4,(b.z-a.z)/2.4);
+  const m=new THREE.Mesh(new THREE.BoxGeometry(b.x-a.x,.22,b.z-a.z),[0,1,2,3,4,5].map(i=>i===2?new THREE.MeshStandardMaterial({map:tt,roughness:.5,metalness:.35}):new THREE.MeshStandardMaterial({color:0x1b1e23,roughness:.55,metalness:.45})));m.position.set((a.x+b.x)/2,.0,(a.z+b.z)/2);m.receiveShadow=true;m.castShadow=true;scene.add(m);outline(ctx,m,0x80858f,1.6,.9)};
  slab(392,52,760,358);slab(392,380,964,626);
 
  // ----- кабели -----
@@ -115,7 +123,10 @@ export function createNetwork(parent,{quality=1}={}){
  const floorGlow=new THREE.Mesh(new THREE.PlaneGeometry(46,32),new THREE.MeshBasicMaterial({map:glowTexture(),color:hdr(.22,.27,.4),transparent:true,opacity:.55,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false}));floorGlow.rotation.x=-Math.PI/2;floorGlow.position.set(2,.03,2);scene.add(floorGlow);
  // ===== облако интернета и пул угроз =====
  const inet=group('inet',W(150,330));
- [[0,.55,0,1.5],[1.4,.4,.5,1.0],[-1.4,.35,.3,1.05],[.5,.3,-1.2,.9],[-.6,.3,1.2,.85]].forEach(([x,y,z,r],i)=>{
+ const cloudMat=inet.userData.cm=new THREE.MeshStandardMaterial({color:0x8995a6,roughness:.62,metalness:.05,emissive:0x0a0e14});
+ const kc=kitModel('cloud',M,{extra:{cloud:cloudMat}});
+ if(kc){inet.add(kc);inet.userData.mats.push(cloudMat)}
+ else [[0,.55,0,1.5],[1.4,.4,.5,1.0],[-1.4,.35,.3,1.05],[.5,.3,-1.2,.9],[-.6,.3,1.2,.85]].forEach(([x,y,z,r],i)=>{
   const cm=inet.userData.cm||(inet.userData.cm=new THREE.MeshStandardMaterial({color:0x8995a6,roughness:.62,metalness:.05,emissive:0x0a0e14}));const m=new THREE.Mesh(new THREE.SphereGeometry(r,32,24),cm);m.position.set(x,y+.2,z);m.castShadow=true;inet.add(m);if(i===0)inet.userData.mats.push(cm);
  });
  const hive=new THREE.Group();hive.position.copy(W(150,260,6.2));scene.add(hive);
@@ -149,7 +160,7 @@ export function createNetwork(parent,{quality=1}={}){
   for(let z=z0+.6;z<=z1-.3;z+=1.6){mesh(new THREE.CylinderGeometry(.09,.11,.7,14),M.frame,gw,[FX,.35,z]);const c=new THREE.Mesh(new THREE.CylinderGeometry(.095,.095,.06,14),fenceRail);c.position.set(FX,.72,z);gw.add(c)}
  }
  // столбы проёма
- [gapA,gapB].forEach(y=>{const z=W(0,y).z;mesh(rbox(.46,1.0,.46,.1),M.frame,gw,[FX,.5,z]);const cap=new THREE.Mesh(new THREE.BoxGeometry(.5,.1,.5),fenceRail);cap.position.set(FX,1.04,z);gw.add(cap)});
+ [gapA,gapB].forEach(y=>{const z=W(0,y).z;const kp=kitModel('post',M,{glow:{led_r:fenceRail}});if(kp){kp.position.set(FX,0,z);gw.add(kp);return}mesh(rbox(.46,1.0,.46,.1),M.frame,gw,[FX,.5,z]);const cap=new THREE.Mesh(new THREE.BoxGeometry(.5,.1,.5),fenceRail);cap.position.set(FX,1.04,z);gw.add(cap)});
  gw.userData.mats.push(fenceMat);
 
  // ===== DMZ: веб-портал (две стойки) и почта =====
