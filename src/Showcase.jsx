@@ -2,7 +2,7 @@ import React,{useLayoutEffect,useEffect,useRef,useState} from 'react';
 import {gsap} from 'gsap';
 import {programs,catalogs,ecosystem,baseShort} from './data';
 import {Qr,reduced,Reveal} from './ui';
-import {loadBoard} from './records';
+import {useBoard} from './records';
 import {fmtTime} from './scoring';
 
 // Витрина: слева — профессиональные программы (в т.ч. планы 2027), справа — курсы по продуктам.
@@ -47,7 +47,7 @@ export default function Showcase({results,onRestart,mine}){
 
 // Топ стенда по очкам: лучшие результаты из таблицы рекордов, свой результат подсвечен
 export function TopBoard({mine,limit=5,className='s-anim'}){
- const list=loadBoard(),top=list.slice(0,limit),myPlace=mine?list.findIndex(r=>r.at===mine)+1:0;
+ const list=useBoard(),top=list.slice(0,limit),myPlace=mine?list.findIndex(r=>r.at===mine)+1:0;
  return <div className={className+' top-board'}>
   <div className="tb-head"><span>Топ стенда</span><small>по очкам · {list.length?`участников: ${list.length}`:'таблица пуста'}</small></div>
   {top.length?<ol>{top.map((r,i)=><li key={r.at} className={'tb-r p'+(i+1)+(r.at===mine?' me':'')}>

@@ -16,8 +16,8 @@ import {sfx} from './audio';
 import Showcase from './Showcase';
 import Demo,{demoOrder} from './Demo';
 import {accScore,speedScore,blitzScore,makeResult,fmtTime} from './scoring';
-import {loadBoard,addRecord,seedBoard} from './records';
-import {NickPrompt,BoardAdmin,MiniBoard,AttBoard} from './RecordsUI';
+import {useBoard,addRecord,seedBoard,boardReady,boardMode,isAdmin,adminLogout} from './records';
+import {NickPrompt,BoardAdmin,MiniBoard,AttBoard,AdminGate} from './RecordsUI';
 import Perimeter from './levels/Perimeter';
 import Hardening from './levels/Hardening';
 import Traffic from './levels/Traffic';
@@ -64,7 +64,7 @@ function Hud({level,score,seconds,onHome}){
 
 function Attract({onStart,onDemo,diving,locked}){
  const ref=useRef();
- const rec=loadBoard().slice(0,3).map((r,i)=>`★ ${i+1}. ${r.name} — ${r.score} очков · ${fmtTime(r.secs)}`);
+ const rec=useBoard().slice(0,3).map((r,i)=>`★ ${i+1}. ${r.name} — ${r.score} очков · ${fmtTime(r.secs)}`);
  const items=[...ticker.slice(0,3),...(rec.length?rec:['★ Таблица рекордов пуста — станьте первым']),...ticker.slice(3)];
  useEffect(()=>{if(!diving||reduced())return;const q=x=>ref.current.querySelectorAll(x);
   const tl=gsap.timeline();tl.to(q('.att-anim'),{opacity:0,x:-70,duration:.6,stagger:.05,ease:'power3.in'},0).to(q('.att-ticker,.demo-open,.att-grad'),{opacity:0,duration:.5},0);return()=>tl.kill()},[diving]);
@@ -263,8 +263,8 @@ function App(){
  const [results,setResults]=useState([]),[pending,setPending]=useState(null),[t0,setT0]=useState(0),[seconds,setSeconds]=useState(0),[runId,setRunId]=useState(0);
  const [myRec,setMyRec]=useState(null),[demo,setDemo]=useState(false),[idleLeft,setIdleLeft]=useState(null),[diving,setDiving]=useState(false);
  const [trans,setTrans]=useState(null),[impact,setImpact]=useState(0),[tour,setTour]=useState(-1),[nick,setNick]=useState(''),[askNick,setAskNick]=useState(false),[,setBoardV]=useState(0);
- const keyRef=useRef(''),lastTouch=useRef(Date.now()),demoRef=useRef(false),lvT0=useRef(Date.now()),[admin,setAdmin]=useState(false);demoRef.current=demo;
- useEffect(()=>{const k=e=>{if(e.ctrlKey&&e.shiftKey&&(e.key==='L'||e.key==='l'||e.key==='Д'||e.key==='д')){e.preventDefault();setAdmin(a=>!a)}};addEventListener('keydown',k);return()=>removeEventListener('keydown',k)},[]);
+ const keyRef=useRef(''),lastTouch=useRef(Date.now()),demoRef=useRef(false),lvT0=useRef(Date.now()),[admin,setAdmin]=useState(false),[gate,setGate]=useState(false);demoRef.current=demo;
+ useEffect(()=>{const k=e=>{if(e.ctrlKey&&e.shiftKey&&(e.key==='L'||e.key==='l'||e.key==='Д'||e.key==='д')){e.preventDefault();setAdmin(a=>a?false:isAdmin()?'open':'gate')}};addEventListener('keydown',k);return()=>removeEventListener('keydown',k)},[]);
  // мир ↔ экран
  useEffect(()=>{
   if(!GLW){net.set({paused:screen!=='play',station:'l0',phase:'work',slotsVisible:screen==='play'&&li===0&&ready});return}
@@ -275,12 +275,12 @@ function App(){
   if(screen==='results'||screen==='final')net.set({paused:false,station:'finale',phase:'work',snap:sn,slotsVisible:false});
  },[screen,li,trans,ready,tour]);
  // облёт: через 30 с без касаний на заставке; круг по пяти станциям, затем снова планета
- useEffect(()=>{if(screen!=='attract'||!GLW||demo||askNick){setTour(-1);return}
+ useEffect(()=>{if(screen!=='attract'||!GLW||demo||askNick||gate||admin){setTour(-1);return}
   let i=-1,t;const tick=()=>{const idle=Date.now()-lastTouch.current;
    if(i<0){if(idle>30000&&!diving){i=0;setTour(0)}}else{i++;if(i>=levels.length){i=-1;setTour(-1);lastTouch.current=Date.now()}else setTour(i)}
    t=setTimeout(tick,i<0?1000:TOUR_STEP)};t=setTimeout(tick,1000);
   const stop=()=>{if(i>=0){i=-1;setTour(-1)}};addEventListener('pointerdown',stop,true);
-  return()=>{clearTimeout(t);removeEventListener('pointerdown',stop,true)}},[screen,demo,diving,askNick]);
+  return()=>{clearTimeout(t);removeEventListener('pointerdown',stop,true)}},[screen,demo,diving,askNick,gate,admin]);
  // ввод ника брошен: минута без касаний — обратно на заставку
  useEffect(()=>{if(!askNick)return;const t=setInterval(()=>{if(Date.now()-lastTouch.current>60000)setAskNick(false)},1000);return()=>clearInterval(t)},[askNick]);
  useEffect(()=>{const a=hero.api;if(a)a.ctx.paused=tour>=0},[tour]);
@@ -358,7 +358,8 @@ function App(){
  const askStart=()=>{if(!diving&&!curtain&&!trans)setAskNick(true)};
  const nickDone=name=>{setNick(name);setAskNick(false);beginDive()};
  const startDemo=()=>{setDemo(true);go('l0')};
- const exitDemo=()=>{setDemo(false);setResults([]);setPending(null);setScreen('attract')};
+ const askDemo=()=>setGate(true);
+ const exitDemo=()=>{adminLogout();setDemo(false);setResults([]);setPending(null);setScreen('attract')};
 
  const L=levels[li],View=views[L.id];
  keyRef.current=screen==='play'?runId+'-'+li:'';
@@ -367,7 +368,7 @@ function App(){
  return <div className="viewport"><div className={'stage'+(webglOK()?'':' nogl')+(GLW?' world':'')} style={{transform:`translate(-50%,-50%) scale(${k})`}}>
   {webglOK()&&<NetStage quality={Q}/>}
   {screen==='attract'&&webglOK()&&<div className={'hero-wrap'+(tour>=0?' away':'')}><Hero3D diving={diving} quality={Q}/></div>}
-  {screen==='attract'&&<div className={'attract-wrap'+(tour>=0?' away':'')}><Attract onStart={askStart} onDemo={startDemo} diving={diving} locked={askNick}/></div>}
+  {screen==='attract'&&<div className={'attract-wrap'+(tour>=0?' away':'')}><Attract onStart={askStart} onDemo={askDemo} diving={diving} locked={askNick}/></div>}
   {screen==='attract'&&askNick&&<NickPrompt onSave={nickDone} onCancel={()=>setAskNick(false)}/>}
   {screen==='attract'&&tour>=0&&<TourCaption i={tour}/>}
   {screen==='play'&&<>
@@ -385,11 +386,15 @@ function App(){
   {curtain&&<Curtain key={curtain.id} level={curtain.lv!=null?levels[curtain.lv]:null} lv={curtain.lv??0} onCovered={curtain.covered} onLift={curtain.lifted} onDone={()=>setCurtain(c=>c&&c.id===curtain.id?null:c)}/>}
   {idleLeft!=null&&!demo&&<IdleWarn left={idleLeft}/>}
   {demo&&<Demo at={demoAt} onGo={go} onExit={exitDemo} onBoard={()=>setBoardV(v=>v+1)}/>}
-  {admin&&<BoardAdmin onClose={()=>setAdmin(false)}/>}
+  {admin==='gate'&&<AdminGate title="Служебное окно" onOk={()=>setAdmin('open')} onCancel={()=>setAdmin(false)}/>}
+  {admin==='open'&&<BoardAdmin onClose={()=>setAdmin(false)}/>}
+  {gate&&<AdminGate onOk={()=>{setGate(false);startDemo()}} onCancel={()=>setGate(false)}/>}
  </div></div>;
 }
-// ссылка ?seed — тестовые результаты на этом устройстве
+// ссылка ?seed — тестовые результаты, только в режиме без сервера (общий топ так не засорить)
 const qs=new URLSearchParams(location.search);
-if(qs.has('seed')){seedBoard();qs.delete('seed');const q=qs.toString();history.replaceState(null,'',location.pathname+(q?'?'+q:'')+location.hash)}
-// сцены собираются из моделей Blender: ждём их загрузку (не дольше 8 с, иначе — простые формы)
-kitReady.then(()=>createRoot(document.getElementById('root')).render(<App/>));
+// сцены собираются из моделей Blender (не дольше 8 с, иначе — простые формы); заодно выясняем, есть ли сервер с общим топом
+Promise.all([kitReady,boardReady]).then(()=>{
+ if(qs.has('seed')){if(boardMode()==='local')seedBoard({force:true});qs.delete('seed');const q=qs.toString();history.replaceState(null,'',location.pathname+(q?'?'+q:'')+location.hash)}
+ createRoot(document.getElementById('root')).render(<App/>);
+});

@@ -1,0 +1,27 @@
+# Запуск: docker compose up -d --build            (игра на 127.0.0.1:8080, TLS — ваш nginx/Caddy)
+#     или: DOMAIN=stand.example.ru docker compose --profile caddy up -d --build   (Caddy сам получит сертификат)
+services:
+  stand:
+    build: .
+    restart: unless-stopped
+    env_file: .env            # ADMIN_PASSWORD_HASH=... (см. DEPLOY.md)
+    environment:
+      TRUST_PROXY: "1"
+    volumes:
+      - stand-data:/data      # таблица board.json и резервные копии
+    ports:
+      - "127.0.0.1:8080:8080"
+  caddy:
+    profiles: ["caddy"]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [stand]
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+volumes:
+  stand-data:
+  caddy-data:

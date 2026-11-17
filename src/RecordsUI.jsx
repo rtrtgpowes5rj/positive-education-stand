@@ -2,7 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {gsap} from 'gsap';
 import {Btn,reduced} from './ui';
 import {fmtTime} from './scoring';
-import {loadBoard,removeRecord,clearBoard,nickTaken} from './records';
+import {useBoard,removeRecord,clearBoard,nickKey,adminLogin,boardMode} from './records';
 import {VList} from './VList';
 
 const LAYOUTS={
@@ -17,7 +17,7 @@ export function NickPrompt({onSave,onCancel}){
  useEffect(()=>{if(!reduced())gsap.from(ref.current,{y:50,opacity:0,duration:.6,ease:'power3.out'})},[]);
  const add=ch=>{setName(n=>n.length>=14?n:n+(caps?ch.toUpperCase():ch));setCaps(false)};
  const back=()=>setName(n=>n.slice(0,-1));
- const taken=nickTaken(name);
+ const board=useBoard(),taken=!!name.trim()&&board.some(x=>nickKey(x.name)===nickKey(name));
  const done=()=>{if(name.trim().length>=2&&!taken)onSave(name.trim())};
  useEffect(()=>{
   const k=e=>{
@@ -47,21 +47,34 @@ export function NickPrompt({onSave,onCancel}){
  </div></div>;
 }
 
-// Служебное окно: Ctrl+Shift+L — удалить запись или очистить таблицу
+// Пароль демо-режима и служебного окна. На сервере — общий для всех планшетов, перебор блокируется.
+export function AdminGate({title='Демо-режим',onOk,onCancel}){
+ const [pw,setPw]=useState(''),[err,setErr]=useState(''),[busy,setBusy]=useState(false),inp=useRef();
+ useEffect(()=>{inp.current&&inp.current.focus()},[]);
+ const go=async e=>{e&&e.preventDefault();if(!pw||busy)return;setBusy(true);setErr('');const r=await adminLogin(pw);setBusy(false);if(r.ok)onOk();else{setErr(r.error);setPw('')}};
+ return <div className="nick-wrap" onClick={onCancel}><form className="nick admin gate" onClick={e=>e.stopPropagation()} onSubmit={go}>
+  <div className="nick-head"><span className="kicker">Только для организаторов</span><h2>{title}</h2>
+   <p className={err?'nick-err':''} role="status">{err||(boardMode()==='server'?'Введите пароль. Из демо-режима можно очистить общий топ всех стендов.':'Введите пароль организатора.')}</p></div>
+  <input ref={inp} className="gate-in" type="password" autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck="false" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>{e.stopPropagation();if(e.key==='Escape')onCancel()}} aria-label="Пароль"/>
+  <div className="nick-btns"><Btn className="primary" disabled={!pw||busy}>{busy?'Проверяю…':'Войти'}</Btn><button type="button" className="ghost-btn" onClick={onCancel}>Отмена</button></div>
+ </form></div>;
+}
+
+// Служебное окно: Ctrl+Shift+L — удалить запись или очистить таблицу (после пароля)
 export function BoardAdmin({onClose}){
- const [list,setList]=useState(loadBoard());
- const del=at=>{removeRecord(at);setList(loadBoard())};
+ const list=useBoard(),[err,setErr]=useState('');
+ const run=f=>f().then(()=>setErr('')).catch(e=>setErr(e.message||'Не удалось'));
  return <div className="nick-wrap" onClick={onClose}><div className="nick admin" onClick={e=>e.stopPropagation()}>
-  <div className="nick-head"><span className="kicker">Служебное · таблица рекордов</span><h2>Рекорды стенда</h2></div>
-  {list.length?<ol className="adm-list">{list.map((r,i)=><li key={r.at}><span>{i+1}</span><b>{r.name}</b><em>{r.score}</em><small>{fmtTime(r.secs)}</small><button onClick={()=>del(r.at)}>удалить</button></li>)}</ol>:<p className="adm-empty">Пока пусто</p>}
-  <div className="nick-btns"><button className="ghost-btn" onClick={()=>{if(confirm('Очистить всю таблицу рекордов?')){clearBoard();setList([])}}}>Очистить всё</button><Btn className="primary" onClick={onClose}>Закрыть</Btn></div>
+  <div className="nick-head"><span className="kicker">Служебное · {boardMode()==='server'?'общий топ на сервере':'таблица этого устройства'}</span><h2>Рекорды стенда</h2>{err&&<p className="nick-err" role="status">{err}</p>}</div>
+  {list.length?<ol className="adm-list">{list.map((r,i)=><li key={r.at}><span>{i+1}</span><b>{r.name}</b><em>{r.score}</em><small>{fmtTime(r.secs)}</small><button onClick={()=>run(()=>removeRecord(r.at))}>удалить</button></li>)}</ol>:<p className="adm-empty">Пока пусто</p>}
+  <div className="nick-btns"><button className="ghost-btn" onClick={()=>{if(confirm('Очистить всю таблицу рекордов?'))run(clearBoard)}}>Очистить всё</button><Btn className="primary" onClick={onClose}>Закрыть</Btn></div>
  </div></div>;
 }
 
 // Топ на заставке: пять строк, прокрутка по всем участникам; по нажатию растёт на высоту экрана
 const AB_ROW=36,AB_OPEN=20;
 export function AttBoard(){
- const list=loadBoard(),n=list.length,[open,setOpen]=useState(false),box=useRef();
+ const list=useBoard(),n=list.length,[open,setOpen]=useState(false),box=useRef();
  useEffect(()=>{if(!open&&box.current)box.current.scrollTop=0},[open]);
  return <div className={'att-anim att-board top-board'+(open?' open':'')}>
   <div className="tb-head"><span>Топ стенда</span>{n>0&&<small>участников: {n}</small>}</div>
@@ -72,7 +85,7 @@ export function AttBoard(){
 }
 
 export function MiniBoard({mine}){
- const list=loadBoard().slice(0,5);
+ const list=useBoard().slice(0,5);
  return <div className="mini-board"><span className="mb-h">Рекорды стенда</span>
   {list.length?list.map((r,i)=><div key={r.at} className={'mb-r'+(mine&&r.at===mine?' me':'')}><i>{i+1}</i><b>{r.name}</b><em>{r.score}</em><small>{fmtTime(r.secs)}</small></div>)
    :<p>Пока пусто — станьте первым.</p>}

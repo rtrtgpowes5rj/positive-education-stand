@@ -1,7 +1,7 @@
 import React,{useEffect,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import logo from '../assets/edu_long.svg';
-import {loadBoard} from '../records';
+import {useBoard,boardReady,boardMode} from '../records';
 import {fmtTime} from '../scoring';
 import {VList} from '../VList';
 import {makeXlsx} from './xlsx';
@@ -19,15 +19,12 @@ function save(rows,top){
 }
 
 function App(){
- const [list,setList]=useState(loadBoard),[top,setTop]=useState(5),[saved,setSaved]=useState('');
- // страница открыта рядом с игрой: новые результаты появляются сами
- useEffect(()=>{const up=()=>setList(loadBoard());addEventListener('storage',up);addEventListener('focus',up);const t=setInterval(up,4000);
-  return()=>{removeEventListener('storage',up);removeEventListener('focus',up);clearInterval(t)}},[]);
+ const list=useBoard(),[top,setTop]=useState(5),[saved,setSaved]=useState('');
  const rows=top?list.slice(0,top):list;
  return <main className="tp">
   <header className="tp-top"><img src={logo} alt="Positive Education"/><a href="./">К игре</a></header>
   <div className="tp-head">
-   <div><h1>Топ игроков</h1><p>Участников: {list.length}. Показаны результаты, сохранённые в этом браузере.</p></div>
+   <div><h1>Топ игроков</h1><p>Участников: {list.length}. {boardMode()==='server'?'Общий топ всех стендов, обновляется сам.':'Показаны результаты, сохранённые в этом браузере.'}</p></div>
    <button className="tp-export" disabled={!rows.length} onClick={()=>setSaved(save(rows,top))}>Скачать Excel</button>
   </div>
   <div className="tp-bar">
@@ -42,4 +39,4 @@ function App(){
   </div>
  </main>;
 }
-createRoot(document.getElementById('root')).render(<App/>);
+boardReady.then(()=>createRoot(document.getElementById('root')).render(<App/>));

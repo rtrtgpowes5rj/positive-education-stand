@@ -1124,3 +1124,9 @@ input,textarea{-webkit-user-select:text;user-select:text}
 .insp-top{position:relative;padding-right:120px;min-height:110px}
 .dev.big{position:absolute;right:0;top:-8px;width:120px;height:120px;animation:devIn .45s cubic-bezier(.23,1,.32,1) both}
 @keyframes devIn{from{opacity:0;transform:translateY(8px) scale(.94)}to{opacity:1;transform:none}}
+
+/* ===== пароль демо-режима и служебного окна ===== */
+.nick.admin.gate{width:640px}
+.gate-in{width:100%;height:76px;padding:0 24px;border:2px solid var(--line2);border-radius:12px;background:var(--bg3);color:var(--ink);font:600 30px var(--mono);letter-spacing:.12em;outline:none;transition:border-color .2s}
+.gate-in:focus{border-color:var(--mint)}
+.demo-msg{padding:0 10px;font:500 14px var(--sans);color:var(--mint)}
